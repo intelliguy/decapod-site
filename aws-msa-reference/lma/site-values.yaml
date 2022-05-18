@@ -4,6 +4,7 @@ metadata:
   name: site
 
 global:
+  cluster: siim-adm-spot
   nodeSelector:
     taco-lma: enabled
   clusterName: cluster.local
@@ -20,11 +21,16 @@ global:
   keycloakDomain: keycloak-eom.taco-cat.xyz
   grafanaClientSecret: JLtsanYtrCg21RGxrcVmQP0GeuDFUhpA
 
+
 charts:
 - name: prometheus-operator
   override:
     prometheusOperator.nodeSelector: $(nodeSelector)
     prometheusOperator.admissionWebhooks.patch.image.sha: ""
+
+- name: eck-operator
+  override:
+    global.createOperatorNamespace: false
 
 - name: prometheus
   override:
@@ -33,15 +39,61 @@ charts:
     prometheus.prometheusSpec.retention: 2d
     prometheus.prometheusSpec.externalLabels.taco_cluster: $(clusterName)
     prometheus.prometheusSpec.nodeSelector: $(nodeSelector)
-    
+
     alertmanager.service.type: NodePort
     alertmanager.service.nodePort: 30111
     alertmanager.alertmanagerSpec.alertmanagerConfigSelector.matchLabels.alertmanagerConfig: example
     alertmanager.alertmanagerSpec.nodeSelector: $(nodeSelector)
-    alertmanager.alertmanagerSpec.retention: 2h
-    alertmanager.config.global.slack_api_url: https://hooks.slack.com/services/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
+    alertmanager.alertmanagerSpec.retention: 120h
+    alertmanager.config.global.slack_api_url: https://hooks.slack.com/services/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
+    prometheus.prometheusSpec.nodeSelector: $(nodeSelector)
+    prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName: $(storageClassName)
+    prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage: 500Gi
+    alertmanager.config.receivers:
+    - name: 'default-alert'
+      slack_configs:
+      - channel: "#alert"
+        username: "Prometheus"
+        send_resolved: true
+        title: |-
+          [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ if or (and (eq (len .  Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }} {{ range .    Alerts.Firing }}{{ .Labels.alertname }}{{ end }}{{ range .Alerts.Resolved }}{{ .Labels.alertname }}{{ end }}{{ end }}
+        text: |-
+          {{ if or (and (eq (len .Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }} {{ range .Alerts.Firing }}{{ .Annotations.message }}{{ end }}{{ range .Alerts.Resolved }}{{ .Annotations.message  }}{{ end }}
+          {{ else }}
+          {{ if gt (len .Alerts.Firing) 0 }}
+          *Alerts Firing:*
+            {{ range .Alerts.Firing }}- {{ .Labels.alertname  }}: {{ .Annotations.message }}
+          {{ end }}{{ end }}
+          {{ if gt (len .Alerts.Resolved) 0 }}
+          *Alerts Resolved:*
+            {{ range .Alerts.Resolved }}- {{ .Labels.alertname }}: {{ .Annotations.message }}
+          {{ end }}{{ end }}
+          {{ end }}
+    - name: 'slack-alert'
+      slack_configs:
+      - channel: "#info-by-system"  #FIXME
+        username: "Prometheus"
+        send_resolved: true
+        title: |-
+          [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ if or (and (eq (len .  Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }} {{ range .    Alerts.Firing }}{{ .Labels.alertname }}{{ end }}{{ range .Alerts.Resolved }}{{ .Labels.alertname }}{{ end }}{{ end }}
+        text: |-
+          {{ if or (and (eq (len .Alerts.Firing) 1) (eq (len .Alerts.Resolved) 0)) (and (eq (len .Alerts.Firing) 0) (eq (len .Alerts.Resolved) 1)) }} {{ range .Alerts.Firing }}{{ .Annotations.message }}{{ end }}{{ range .Alerts.Resolved }}{{ .Annotations.message  }}{{ end }}
+          {{ else }}
+          {{ if gt (len .Alerts.Firing) 0 }}
+          *Alerts Firing:*
+            {{ range .Alerts.Firing }}- {{ .Labels.alertname  }}: {{ .Annotations.message }}
+          {{ end }}{{ end }}
+          {{ if gt (len .Alerts.Resolved) 0 }}
+          *Alerts Resolved:*
+            {{ range .Alerts.Resolved }}- {{ .Labels.alertname }}: {{ .Annotations.message }}
+          {{ end }}{{ end }}
+          {{ end }}
+    - name: 'telegram-alert'
+      webhook_configs:
+      - send_resolved: True
+        url: http://prometheus-bot:9087/alert/-GROUP_ID
 
-- name: prometheus-node-exporter  
+- name: prometheus-node-exporter
   override:
     hostNetwork: false
 
@@ -57,6 +109,34 @@ charts:
   override:
     conf.processes: dockerd,kubelet,kube-proxy,ntpd,node
     pod.hostNetwork: false
+
+- name: eck-resource
+  override:
+    kibana.nodeSelector: $(nodeSelector)
+
+    elasticsearch.nodeSets.master.nodeSelector: $(nodeSelector)
+    elasticsearch.nodeSets.master.count: 3
+    elasticsearch.nodeSets.master.javaOpts: "-Xms1g -Xmx1g"
+    elasticsearch.nodeSets.master.limitCpu: 1
+    elasticsearch.nodeSets.master.limitMem: 2Gi
+    elasticsearch.nodeSets.master.pvc.storageClassName: $(storageClassName)
+    elasticsearch.nodeSets.master.pvc.size: 1Gi
+
+    elasticsearch.nodeSets.hotdata.nodeSelector: $(nodeSelector)
+    elasticsearch.nodeSets.hotdata.count: 3
+    elasticsearch.nodeSets.hotdata.javaOpts: "-Xms1g -Xmx1g"
+    elasticsearch.nodeSets.hotdata.limitCpu: 1
+    elasticsearch.nodeSets.hotdata.limitMem: 2Gi
+    elasticsearch.nodeSets.hotdata.pvc.storageClassName: $(storageClassName)
+    elasticsearch.nodeSets.hotdata.pvc.size: 10Gi
+
+    elasticsearch.nodeSets.client.enabled: false
+    elasticsearch.nodeSets.client.nodeSelector: $(nodeSelector)
+    elasticsearch.nodeSets.client.javaOpts: "-Xms10g -Xmx10g"
+    elasticsearch.nodeSets.client.limitCpu: 1
+    elasticsearch.nodeSets.client.limitMem: 20Gi
+    elasticsearch.nodeSets.client.pvc.storageClassName: $(storageClassName)
+
 
 - name: grafana
   override:
@@ -98,11 +178,11 @@ charts:
     fluentbit:
       clusterName: $(clusterName)
       outputs:
-        loki: 
+        loki:
         - name: taco-loki
           host: loki-loki-distributed-gateway
           port: 80
-      targetLogs: 
+      targetLogs:
       - tag: kube.*
         bufferChunkSize: 2M
         bufferMaxSize: 5M
@@ -154,10 +234,10 @@ charts:
         config:
           path: "/tmp/kubernetes-event.log"
     addons:
-      loki: 
+      loki:
         enabled: true
         host: loki
-        port: 3100      
+        port: 3100
         target_file: "/tmp/kubernetes-event.log"
 
     conf.default.hosts:
@@ -206,7 +286,7 @@ charts:
       secretName: $(thanosObjstoreSecret)
     sidecarsService.name: thanos-sidecars
     sidecarsService.endpoints:
-      - 192.168.97.102 # should not be in the loopback range (127.0.0.0/8)
+      - 192.168.5.61 # should not be in the loopback range (127.0.0.0/8)
 
 - name: prepare-etcd-secret
   override:
@@ -216,3 +296,13 @@ charts:
       - key: "node-role.kubernetes.io/master"
         effect: "NoSchedule"
         operator: "Exists"
+
+- name: loki
+  override:
+    nodeSelector: $(nodeSelector)
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClassName: $(storageClassName)
+    serviceMonitor:
+      enabled: true
