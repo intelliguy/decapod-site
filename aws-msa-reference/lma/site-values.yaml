@@ -6,7 +6,7 @@ metadata:
 global:
   nodeSelector:
     taco-lma: enabled
-  clusterName: cluster.local
+  clusterName: c9
   storageClassName: taco-storage
   repository: https://openinfradev.github.io/helm-repo/
   serviceScrapeInterval: 30s
@@ -199,7 +199,7 @@ charts:
     minio.defaultBuckets: thanos
     minio.persistence.storageClass: $(storageClassName)
     minio.persistence.accessMode: ReadWriteOnce
-    minio.persistence.size: 10Gi
+    minio.persistence.size: 2000Gi
 
 - name: thanos-config
   override:
@@ -215,13 +215,19 @@ charts:
 
 - name: prepare-etcd-secret
   override:
+    deployer: tacoplay
     nodeSelector:
-      "node-role.kubernetes.io/master": ""
+      node-role.kubernetes.io/control-plane: ""
+    etcd:
+      certdir: /etc/ssl/etcd
     tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        effect: "NoSchedule"
+        operator: "Exists"
       - key: "node-role.kubernetes.io/master"
         effect: "NoSchedule"
         operator: "Exists"
 
 - name: loki
   override:
-    global.dnsService: kube-dns
+    global.dnsService: coredns
