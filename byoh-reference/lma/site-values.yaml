@@ -10,7 +10,7 @@ global:
   storageClassName: taco-storage
   repository: https://openinfradev.github.io/helm-repo/
   serviceScrapeInterval: 30s
-  defaultPassword: password
+  defaultPassword: 'dev!Sk@broad2813'
   defaultUser: taco
   thanosObjstoreSecret: taco-objstore-secret
 
@@ -24,7 +24,7 @@ global:
   SlackUrl: "FixItByWF"
   SlackChannel: '#temporary-alert'
 
-  grafanaDatasourceMetric: lma-prometheus:9090
+  grafanaDatasourceMetric: thanos-query::9090
   thanosQueryStores:
   - thanos-storegateway:10901
   - prometheus-operated:10901
@@ -107,7 +107,7 @@ charts:
 
 - name: grafana
   override:
-    adminPassword: password
+    adminPassword: 'dev!Sk@broad2813'
     persistence.storageClassName: $(storageClassName)
     sidecar.dashboards.searchNamespace: ALL
     # grafana oidc
