@@ -180,7 +180,7 @@ charts:
         loki_name: taco-loki
         index: syslog
         parser: taco-syslog-parser-for-ubuntu
-        path: /var/log/messages
+        path: /var/log/syslog
         type: syslog
 
 - name: addons
@@ -329,10 +329,15 @@ charts:
       - key: "node-role.kubernetes.io/control-plane"
         effect: "NoSchedule"
         operator: "Exists"
+    etcd:
+      certdir: /etc/ssl/etcd/ssl/
+      certfile: ca.pem
+      client_certfile: node-m1.pem
+      client_keyfile: node-m1-key.pem
 
 - name: loki
   override:
-    global.dnsService: kube-dns
+    global.dnsService: coredns
     # global.clusterDomain: $(clusterDomain) # annotate cluste because the cluster name is still cluster.local regardless cluster
     gateway.service:
       type: NodePort
